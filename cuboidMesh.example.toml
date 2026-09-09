@@ -1,0 +1,30 @@
+# Run (after setup):
+#   cuboidMesh.py --config cuboidMesh.example.toml
+#
+# Note: this requires one-time setup (add MIRAGE programs to PATH and run chmod +x
+# on program scripts). For full setup steps, see:
+#   ../../examples/README.md
+
+[mesh]
+# Output options (relative paths are resolved from this config file's directory).
+output_folder = "./output"
+output_filename = "cuboid_hex8.vtk"
+
+# The script always appends the computed max element size to the name,
+# e.g. cuboid_hex8_hmax0.5.vtk
+
+# Cuboid side lengths in x, y, z.
+sidelength = [10.0, 6.0, 2.0]
+
+# Choose exactly one discretization mode:
+# 1) Element counts (integers):
+nelems = [20, 12, 4]
+
+# 2) OR element sizes (must divide side lengths exactly on each axis):
+# elemsize = [0.5, 0.5, 0.5]
+
+# Center mesh about (0,0,0) before shift.
+center = true
+
+# Optional shift with respect to the origin.
+shift = [0.0, 0.0, 0.0]

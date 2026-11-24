@@ -723,6 +723,51 @@ def _compute_hmax(points2d: Sequence[Vec2f], quads: Sequence[Quad], dz: float) -
 	return max(math.sqrt(max_sq), abs(dz))
 
 
+def _cross_section_quality(
+	points2d: Sequence[Vec2f], quads: Sequence[Quad], target_size: float
+) -> Dict[str, float]:
+	"""Measured quad quality: scaled Jacobian, aspect ratio and size (sqrt(area)) vs target."""
+	sj_min = 1.0
+	sj_sum = 0.0
+	ar_max = 1.0
+	sizes: List[float] = []
+	for q in quads:
+		pts = [points2d[i] for i in q]
+		lengths = []
+		corner_sj = []
+		area2 = 0.0
+		for k in range(4):
+			px, py = pts[k]
+			nx, ny = pts[(k + 1) % 4]
+			bx, by = pts[k - 1]
+			ex, ey = nx - px, ny - py
+			fx, fy = bx - px, by - py
+			le, lf = math.hypot(ex, ey), math.hypot(fx, fy)
+			corner_sj.append((ex * fy - ey * fx) / (le * lf))
+			lengths.append(le)
+			area2 += px * ny - nx * py
+		# The builder winds all quads the same way; take the first quad's winding as
+		# reference so an inverted quad shows up as negative.
+		if not sizes:
+			winding = 1.0 if area2 > 0.0 else -1.0
+		quad_sj = min(winding * s for s in corner_sj)
+		sj_min = min(sj_min, quad_sj)
+		sj_sum += quad_sj
+		ar_max = max(ar_max, max(lengths) / min(lengths))
+		sizes.append(math.sqrt(0.5 * abs(area2)))
+	mean = sum(sizes) / len(sizes)
+	cv = math.sqrt(sum((s - mean) ** 2 for s in sizes) / len(sizes)) / mean
+	return {
+		"sj_min": sj_min,
+		"sj_mean": sj_sum / len(quads),
+		"aspect_max": ar_max,
+		"size_min": min(sizes) / target_size,
+		"size_mean": mean / target_size,
+		"size_max": max(sizes) / target_size,
+		"size_cv": cv,
+	}
+
+
 def _hex_sign(p0: Vec3f, p1: Vec3f, p3: Vec3f, p4: Vec3f) -> float:
 	v1 = (p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
 	v2 = (p3[0] - p0[0], p3[1] - p0[1], p3[2] - p0[2])
@@ -924,6 +969,7 @@ def main() -> None:
 	z_levels = _build_z_levels(mesh_cfg.axis_start, mesh_cfg.dz, mesh_cfg.n_layers)
 
 	hmax = _compute_hmax(points2d, quads, mesh_cfg.dz)
+	quality = _cross_section_quality(points2d, quads, mesh_cfg.uniformity_target_size)
 	out_path = _append_hmax_to_filename(mesh_cfg.out_base_path, hmax) if mesh_cfg.append_hmax else mesh_cfg.out_base_path
 
 	_write_vtk(
@@ -951,13 +997,14 @@ def main() -> None:
 	print(f"  nxy               : {mesh_cfg.nxy}")
 	print(f"  uniformity target : {mesh_cfg.uniformity_target_size:.12g}")
 	print(f"  transition tuned  : {mesh_cfg.tuning_enabled}")
-	print(f"  ds theta_outer    : {mesh_cfg.theta_outer_size:.12g}")
-	print(f"  ds theta_inner    : {mesh_cfg.theta_inner_size:.12g}")
-	print(f"  ds circumferential: {mesh_cfg.circumferential_size:.12g}")
-	print(f"  ds square         : {mesh_cfg.square_size:.12g}")
-	print(f"  dr radial         : {mesh_cfg.radial_size:.12g}")
-	print(f"  transition size   : {mesh_cfg.transition_size:.12g}")
 	print(f"  squaremax         : {mesh_cfg.squaremax:.12g}")
+	print(f"  quality (cross-section, size relative to {mesh_cfg.uniformity_target_size:.6g}):")
+	print(f"    scaled Jacobian : min {quality['sj_min']:.3f}  mean {quality['sj_mean']:.3f}  (1 = square)")
+	print(f"    aspect ratio max: {quality['aspect_max']:.3f}")
+	print(
+		f"    cell size       : min {quality['size_min']:.3f}  mean {quality['size_mean']:.3f}"
+		f"  max {quality['size_max']:.3f}  CV {quality['size_cv']:.3f}"
+	)
 	print(f"  length_axis       : {mesh_cfg.length_axis}")
 	print(f"  axial_mode        : {mesh_cfg.axial_mode}")
 	if mesh_cfg.legacy_target_dz is not None:

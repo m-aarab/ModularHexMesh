@@ -5,7 +5,7 @@
 [mesh]
 # Output (relative paths are resolved from this config file's directory)
 output_folder = "./output"
-output_filename = "cylinder_VAM.vtk"
+output_filename = "cylinder.vtk"
 append_hmax = false
 
 # Geometry

@@ -1,12 +1,11 @@
 # ModularHexMesh
 
-Small, dependency-free generators for structured HEX8 meshes, written for the
-MIRAGE / mirageVPP ray-tracing and curing simulations:
+Small, dependency-free generators for structured HEX8 (hexahedral) meshes:
 
-- `cylindricalMesh.py` builds a cylinder (for example a TVAM vial) as an O-grid: a square core plus rings that blend into the circle, extruded along an axis.
-- `cuboidMesh.py` builds a box of hexahedra (for example a DLP vat or a slab).
+- `cylindricalMesh.py` builds a cylinder as an O-grid: a square core plus rings that blend into the circle, extruded along an axis.
+- `cuboidMesh.py` builds a box of hexahedra.
 
-Both write VTK 3.0 ASCII files (`DATASET UNSTRUCTURED_GRID`, cell type 12), which is the format MIRAGE reads.
+Both write VTK 3.0 ASCII files (`DATASET UNSTRUCTURED_GRID`, cell type 12), readable by ParaView, meshio, PyVista and most finite-element tools.
 
 ![Cylinder cross-section at 20 cells across the radius, coloured by scaled Jacobian and by cell size](docs/cross_section.png)
 
@@ -41,9 +40,9 @@ Extrusion along the axis does not change these in-plane numbers.
 
 ### Units
 
-No unit is enforced: use the length unit of the rest of the simulation. MIRAGE
-computes the inverse element Jacobian in single precision, so keep element sizes
-of order 1 in mesh units. The tutorial cases use 1 unit = 10 um (for example `mesh_size = 1.5` is 15 um).
+No unit is enforced: all lengths are in whatever unit your application uses.
+If the mesh is used in single-precision code, choose the unit so element sizes
+are of order 1.
 
 ## Cylinder input (`cylindricalMesh.py`)
 
@@ -92,7 +91,7 @@ normal use only `rmax`, `length` and `mesh_size` need to be set.
 
 | Key (aliases) | Default | Meaning |
 |---|---|---|
-| `write` (`write_fields`) | `true` | Write `RefractiveIndex` and `Absorptivity` as point data. Set `false` for a homogeneous resin and assign fields in the simulator. |
+| `write` (`write_fields`) | `true` | Write `RefractiveIndex` and `Absorptivity` as point data. Set `false` to write the mesh only. |
 | `n1`, `n2` | 1.4, 1.0 | Refractive index on the axis and the lower clamp. |
 | `amax` (`alpha_max`), `amin` (`alpha_min`) | 0.5, 0.02 | Absorptivity on the axis and the lower clamp. |
 | `profile_radius` (`radius`) | 1.0 | Radius $R$ of the profile. |
@@ -105,10 +104,10 @@ $v(r) = \sqrt{v_{high}^2 (1 - 2 \Delta (r/R)^2)}$ with $\Delta = \frac{1}{2}(1 -
 ```toml
 [mesh]
 output_folder = "./output"
-output_filename = "vial.vtk"
-rmax = 150.0      # [10 um]
-length = 300.0    # [10 um]
-mesh_size = 1.5   # [10 um]
+output_filename = "cylinder.vtk"
+rmax = 150.0
+length = 300.0
+mesh_size = 1.5
 
 [fields]
 write = false
@@ -200,7 +199,7 @@ the nodes, were both tested and made the mesh worse, so neither is used.
 
 ### Resulting quality
 
-A vial with $R = 150$ and `mesh_size` 1.5 (100 cells across the radius,
+A cylinder with $R = 150$ and `mesh_size` 1.5 (100 cells across the radius,
 48,672 cells per layer) has worst scaled Jacobian 0.865, largest aspect ratio
 1.77, and cell sizes between 0.61 and 0.98 times `mesh_size` (CV 0.086). These
 numbers stay the same when the mesh is refined or coarsened, because the shape

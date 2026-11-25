@@ -1,9 +1,6 @@
-# Run (after setup):
-#   cuboidMesh.py --config cuboidMesh.example.toml
-#
-# Note: this requires one-time setup (add MIRAGE programs to PATH and run chmod +x
-# on program scripts). For full setup steps, see:
-#   ../../examples/README.md
+# Run:
+#   python cuboidMesh.py --config cuboidMesh.example.toml
+# Every key is described in README.md.
 
 [mesh]
 # Output options (relative paths are resolved from this config file's directory).

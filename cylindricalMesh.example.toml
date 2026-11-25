@@ -1,51 +1,33 @@
-# Run (after setup):
-#   cylindricalMesh.py --config cylindricalMesh.example.toml
-#
-# Note: this requires one-time setup (add MIRAGE programs to PATH and run chmod +x
-# on program scripts). For full setup steps, see:
-#   ../../examples/README.md
+# Run:
+#   python cylindricalMesh.py --config cylindricalMesh.example.toml
+# Every key is described in README.md.
 
 [mesh]
-# Output controls (relative paths are resolved from this config file directory)
+# Output (relative paths are resolved from this config file's directory)
 output_folder = "./output"
 output_filename = "cylinder_VAM.vtk"
 append_hmax = false
 
-# Geometry controls
+# Geometry
 rmax = 300.0
 length = 600.0
 length_axis = "z" # one of: x, y, z
-
-# General target mesh size (used to derive circumferential resolution and dz)
-mesh_size = 20.0
-
-# Optional explicit angular resolution override:
-# h = 48
-
-# Cross-section layout: "spoke" (default) = bulged square core + rings on straight
-# spokes to the circle; defaults below are optimal at any resolution.
-layout = "spoke"
-# core_fraction = 0.55 # core half-width / rmax
-# core_bulge = 0.134   # core edge bow; tan(15 deg)/2 gives 120-deg core corners
-# nr = 25              # radial layers - 1; default sizes them to mesh_size
-
-# layout = "legacy" reproduces meshes made before the spoke layout; only then:
-# rbase = 225.0
-# nr = 25
-# tune_transition = true # auto-balance square/transition/outer region sizes
-# axis_start = 300.0 # optional override; default centers mesh around 0
+# axis_start = 300.0 # first node layer; default length/2 centres the mesh on 0
 shift = [0.0, 0.0, 0.0]
 
-# Axial discretization
-# - "legacy": reproduces old behavior
-# - "fixed_layers": use n_layers
-# - "fixed_dz": use dz (internally rounded to fill length)
-# - "mesh_size": use mesh_size to derive dz close to target
-axial_mode = "mesh_size"
-# target_dz = 6.08108108108
+# Target cell size: sets the angular resolution, the radial layers and dz
+mesh_size = 20.0
+# h = 12 # optional: 8*h nodes around the circle instead of deriving it from mesh_size
 
-# n_layers = 99
-# dz = 6.1
+# Cross-section (the defaults are optimal at any resolution; see README "Tuning")
+# core_fraction = 0.55 # core half-width / rmax
+# core_bulge = 0.134   # outward bow of the core edges; tan(15 deg)/2 gives 120-deg core corners
+# nr = 6               # rings - 1; default gives a radial step close to mesh_size
+
+# Axial discretization: "mesh_size" (default), "fixed_layers" (n_layers) or "fixed_dz" (dz)
+axial_mode = "mesh_size"
+# n_layers = 30
+# dz = 20.0
 
 [fields]
 write = false

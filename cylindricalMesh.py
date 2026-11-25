@@ -1,62 +1,22 @@
 #!/usr/bin/env python3
-"""Generate a legacy-compatible cylindrical HEX8 mesh from a TOML config.
+"""Generate a cylindrical HEX8 mesh (ASCII VTK) from a TOML config.
 
-This script is a clean refactor of the old custom generator and keeps the same
-core cross-section construction (square core + morphed cylindrical rings).
+Cross-section: an O-grid of a bulged square core and rings on straight spokes
+from the core boundary to the circle, extruded along the cylinder axis. See
+README.md for every config key and for how the mesh is built and tuned.
 
 Usage:
   python cylindricalMesh.py --config cylindricalMesh.example.toml
 
-Config format (TOML):
+Minimal config:
 
 [mesh]
-output_folder = "./output"
-output_filename = "cylinder.vtk"
-append_hmax = true
-
-rmax = 300.0
-length = 600.0
-length_axis = "z"  # one of: x, y, z
-
-# Set either a general mesh size or a manual angular resolution h.
-mesh_size = 10.0
-# h = 48
-
-# Cross-section layout (default "spoke"):
-# layout = "spoke"   # bulged square core + rings on straight spokes to the circle
-# core_fraction = 0.55 # core half-width / rmax
-# core_bulge = 0.134 # mid-side bow of the core edges / half-width; tan(15 deg)/2
-#                    # makes the core corners 120 deg (worst scaled Jacobian 0.866)
-# nr = 40            # radial layers - 1; default sizes them to mesh_size
-#
-# The defaults do not depend on resolution. Worst cells are the three meeting at
-# each core corner (all 120 deg) and the rim cells on the diagonals, which are
-# radially squeezed because the diagonal spoke is the shortest:
-#   least stretched cells : pi/(4 c) = (1 - c(1+b)) / (1 - sqrt(2) c)  -> c ~ 0.51
-#   most uniform sizes    : c ~ 0.58;  0.55 is within ~15 % of both.
-#
-# layout = "legacy" reproduces meshes from before the spoke layout and uses:
-# rbase = 225.0
-# nr = 25
-# tune_transition = true # auto-tune square core and outer region for size uniformity
-# axis_start = 300.0 # optional override; default centers mesh around 0
-# shift = [0.0, 0.0, 0.0]
-
-# Axial discretization modes:
-# axial_mode = "legacy"       # default, reproduces old stacking behavior
-# axial_mode = "fixed_layers" # requires n_layers
-# axial_mode = "fixed_dz"     # requires dz
-# axial_mode = "mesh_size"    # uses mesh_size to set dz close to target
-# n_layers = 88
-# dz = 6.9
+rmax = 150.0
+length = 300.0
+mesh_size = 1.5
 
 [fields]
-write = true
-n1 = 1.4
-n2 = 1.0
-amax = 0.5
-amin = 0.02
-profile_radius = 1.0
+write = false
 """
 
 from __future__ import annotations

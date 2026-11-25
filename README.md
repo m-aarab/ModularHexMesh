@@ -6,9 +6,9 @@ MIRAGE / mirageVPP ray-tracing and curing simulations:
 - `cylindricalMesh.py` builds a cylinder (for example a TVAM vial) as an O-grid: a square core plus rings that blend into the circle, extruded along an axis.
 - `cuboidMesh.py` builds a box of hexahedra (for example a DLP vat or a slab).
 
-Both write legacy ASCII VTK (`DATASET UNSTRUCTURED_GRID`, cell type 12), which is the format MIRAGE reads.
+Both write VTK 3.0 ASCII files (`DATASET UNSTRUCTURED_GRID`, cell type 12), which is the format MIRAGE reads.
 
-![Cross-section of the legacy and the spoke cylinder layout, coloured by scaled Jacobian](docs/cross_section.png)
+![Cylinder cross-section at 20 cells across the radius, coloured by scaled Jacobian and by cell size](docs/cross_section.png)
 
 ## Requirements
 
@@ -57,30 +57,27 @@ aliases, the first one present in the list is used.
 | `rmax` (`outer_radius`) | required | Cylinder radius. |
 | `length` (`z_length`) | required | Length along the axis. |
 | `mesh_size` (`elem_size`, `element_size`, `target_mesh_size`) | - | Target edge length. Sets the angular resolution, the radial layers and (in `mesh_size` axial mode) the axial step. |
-| `h` (`angular_resolution`) | from `mesh_size` | Overrides the angular resolution: `ntheta = 8 h` nodes around the circle, `2 h` cells per side of the core. Give `h` or `mesh_size`. |
+| `h` (`angular_resolution`) | from `mesh_size` | Overrides the angular resolution: `ntheta = 8 h` nodes around the circle, `2 h` cells per side of the core. Give `h` or `mesh_size`; with only `h`, the rim cell width is used as the target size. |
 | `length_axis` (`axis`, `cylinder_axis`) | `"z"` | Cylinder axis: `x`, `y` or `z`. |
 | `axis_start` (`z_start`, `z0`, `start`) | `length/2` | Axial position of the first node layer. Layers run towards negative values, so the default centres the mesh on 0. |
 | `shift` (`origin_shift`, `offset`) | `[0, 0, 0]` | Translation applied to all points. |
 
-### Cross-section layout
+### Cross-section
 
-| Key | Default | Meaning |
+| Key (aliases) | Default | Meaning |
 |---|---|---|
-| `layout` | `"spoke"` | `"spoke"`: bulged square core plus rings on straight spokes (see [How the cylinder mesh is built](#how-the-cylinder-mesh-is-built)). `"legacy"`: the previous generator, kept so old meshes can be reproduced exactly. |
-| `core_fraction` | `0.55` | Spoke only. Core half-width divided by `rmax`. Must satisfy `core_fraction * max(sqrt(2), 1 + core_bulge) < 1`. |
-| `core_bulge` | `0.134` | Spoke only. Outward bow of each core edge at mid-side, as a fraction of the half-width. The default, tan(15 deg)/2, makes the core corners 120 deg. |
-| `nr` (`n_radial`) | from `mesh_size` | Number of rings minus one, so the annulus has `nr + 1` cell layers. Used by both layouts. |
-| `rbase` (`inner_radius`, `transition_radius`) | `0.75 rmax` | Legacy only. Radius where the outer rings start. Ignored with a warning in the spoke layout. |
-| `tune_transition` (`tune_uniformity`, `auto_tune_regions`) | on if `rbase` or `nr` is missing | Legacy only. Searches `rbase` and `nr` for size uniformity. |
+| `core_fraction` | `0.55` | Core half-width divided by `rmax`. Must satisfy `core_fraction * max(sqrt(2), 1 + core_bulge) < 1`. |
+| `core_bulge` | `0.134` | Outward bow of each core edge at mid-side, as a fraction of the half-width. The default, tan(15 deg)/2, makes the core corners 120 deg. |
+| `nr` (`n_radial`) | from the target size | Number of rings minus one, so the annulus has `nr + 1` cell layers. |
 
-The spoke defaults are the same at every resolution, so in normal use only
-`rmax`, `length` and `mesh_size` need to be set.
+These defaults are optimal at every resolution (see [Tuning](#tuning)), so in
+normal use only `rmax`, `length` and `mesh_size` need to be set.
 
 ### Axial discretization
 
 | Key (aliases) | Meaning |
 |---|---|
-| `axial_mode` (`z_mode`) | `mesh_size` (default when `mesh_size` is set): `round(length / mesh_size)` layers. `fixed_layers`: needs `n_layers` (`layers`, `nz`). `fixed_dz`: needs `dz` (`axial_step`), rounded so the layers fill `length`. `legacy` (default without `mesh_size`): optional `target_dz`; note that this mode makes the mesh one `dz` longer than `length`. |
+| `axial_mode` (`z_mode`) | `mesh_size` (default): `round(length / target size)` layers. `fixed_layers`: needs `n_layers` (`layers`, `nz`). `fixed_dz`: needs `dz` (`axial_step`), rounded so the layers fill `length`. |
 
 ### Output
 
@@ -201,28 +198,10 @@ the best on all three at once.
 Grading the radial layers along the diagonal spokes, and Laplacian smoothing of
 the nodes, were both tested and made the mesh worse, so neither is used.
 
-### Result
+### Resulting quality
 
-Tutorial cone vial ($R = 150$, `mesh_size` 1.5):
-
-| Layout | Worst scaled Jacobian | Largest aspect ratio | Cell size / target | Size CV | Cells per layer |
-|---|---|---|---|---|---|
-| legacy (`rbase = 120`) | 0.45 | 4.9 | 0.49 - 1.11 | 0.148 | 49,920 |
-| spoke (defaults) | 0.865 | 1.77 | 0.61 - 0.98 | 0.086 | 48,672 |
-
-The spoke numbers stay the same under refinement, while the legacy layout
-degrades as the mesh is refined (worst scaled Jacobian 0.71 at 10 cells across
-the radius, 0.33 at 150).
-
-### Legacy layout
-
-`layout = "legacy"` keeps the previous construction unchanged. Each ring
-blends, with weight $i / n_r$, from a square of half-width $r / \sqrt{2}$ to the
-circle; on the flat sides the node positions mix arc spacing and linear spacing,
-and the diagonal node is moved inward by one radial step. Two features of this
-construction cause its distorted cells:
-
-- the linear spacing on the flat sides spans the core half-width instead of the ring's own half-width, which leaves wide, kinked cells next to the diagonals;
-- the first ring uses partly arc spacing while the core boundary is linearly spaced, which skews the transition layer.
-
-`rbase` and `nr` are chosen by `tune_transition` from a size model of the regions.
+A vial with $R = 150$ and `mesh_size` 1.5 (100 cells across the radius,
+48,672 cells per layer) has worst scaled Jacobian 0.865, largest aspect ratio
+1.77, and cell sizes between 0.61 and 0.98 times `mesh_size` (CV 0.086). These
+numbers stay the same when the mesh is refined or coarsened, because the shape
+of the cross-section depends only on $b$ and $c$.

@@ -630,12 +630,20 @@ def _build_ring_points(
 	return points
 
 
-def _build_square_points(squaremax: float, nxy: int) -> List[Vec2f]:
+def _build_square_points(squaremax: float, nxy: int, bulge: float = 0.0) -> List[Vec2f]:
+	"""Square core grid; bulge > 0 bows each edge outward by bulge*squaremax at mid-side.
+
+	A parabolic bow x = u*s*(1 + b*(1 - v^2)) opens the core corner angle to
+	90 + 2*atan(2b) degrees, which relieves the 135-degree angles of the two ring
+	cells meeting at each corner.
+	"""
 	points: List[Vec2f] = []
 	for i in range(nxy + 1):
-		x = -squaremax + i / nxy * 2.0 * squaremax
+		u = -1.0 + 2.0 * i / nxy
 		for j in range(nxy + 1):
-			y = -squaremax + j / nxy * 2.0 * squaremax
+			v = -1.0 + 2.0 * j / nxy
+			x = u * squaremax * (1.0 + bulge * (1.0 - v * v))
+			y = v * squaremax * (1.0 + bulge * (1.0 - u * u))
 			points.append((x, y))
 	return points
 

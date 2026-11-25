@@ -22,7 +22,20 @@ length_axis = "z"  # one of: x, y, z
 mesh_size = 10.0
 # h = 48
 
-# Optional legacy geometry controls:
+# Cross-section layout (default "spoke"):
+# layout = "spoke"   # bulged square core + rings on straight spokes to the circle
+# core_fraction = 0.55 # core half-width / rmax
+# core_bulge = 0.134 # mid-side bow of the core edges / half-width; tan(15 deg)/2
+#                    # makes the core corners 120 deg (worst scaled Jacobian 0.866)
+# nr = 40            # radial layers - 1; default sizes them to mesh_size
+#
+# The defaults do not depend on resolution. Worst cells are the three meeting at
+# each core corner (all 120 deg) and the rim cells on the diagonals, which are
+# radially squeezed because the diagonal spoke is the shortest:
+#   least stretched cells : pi/(4 c) = (1 - c(1+b)) / (1 - sqrt(2) c)  -> c ~ 0.51
+#   most uniform sizes    : c ~ 0.58;  0.55 is within ~15 % of both.
+#
+# layout = "legacy" reproduces meshes from before the spoke layout and uses:
 # rbase = 225.0
 # nr = 25
 # tune_transition = true # auto-tune square core and outer region for size uniformity
@@ -66,7 +79,7 @@ except ModuleNotFoundError:  # pragma: no cover
 		) from exc
 
 
-# Spoke layout defaults (resolution independent, see README "Spoke layout"):
+# Spoke layout defaults (resolution independent, see the module docstring):
 # bulge tan(15 deg)/2 makes the core corner 120 deg, so the three cells meeting there
 # all have 120-deg corners (worst scaled Jacobian sin 120 = 0.866, the topology's best).
 CORE_BULGE_DEFAULT = math.tan(math.radians(15.0)) / 2.0

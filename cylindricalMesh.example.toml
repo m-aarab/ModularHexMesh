@@ -22,10 +22,17 @@ mesh_size = 20.0
 # Optional explicit angular resolution override:
 # h = 48
 
-# Optional overrides for legacy defaults:
+# Cross-section layout: "spoke" (default) = bulged square core + rings on straight
+# spokes to the circle; defaults below are optimal at any resolution.
+layout = "spoke"
+# core_fraction = 0.55 # core half-width / rmax
+# core_bulge = 0.134   # core edge bow; tan(15 deg)/2 gives 120-deg core corners
+# nr = 25              # radial layers - 1; default sizes them to mesh_size
+
+# layout = "legacy" reproduces meshes made before the spoke layout; only then:
 # rbase = 225.0
 # nr = 25
-tune_transition = true # auto-balance square/transition/outer region sizes
+# tune_transition = true # auto-balance square/transition/outer region sizes
 # axis_start = 300.0 # optional override; default centers mesh around 0
 shift = [0.0, 0.0, 0.0]
 

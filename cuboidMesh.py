@@ -261,7 +261,7 @@ def _write_vtk_unstructured_hex8(
 	out_path.parent.mkdir(parents=True, exist_ok=True)
 	with out_path.open("w", encoding="utf-8") as f:
 		f.write("# vtk DataFile Version 3.0\n")
-		f.write("MIRAGE cuboid HEX8 mesh\n")
+		f.write("cuboid HEX8 mesh\n")
 		f.write("ASCII\n")
 		f.write("DATASET UNSTRUCTURED_GRID\n")
 

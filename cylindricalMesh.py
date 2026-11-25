@@ -578,7 +578,7 @@ def _write_vtk(
 	out_path.parent.mkdir(parents=True, exist_ok=True)
 	with out_path.open("w", encoding="utf-8") as f:
 		f.write("# vtk DataFile Version 3.0\n")
-		f.write("MIRAGE cylindrical HEX8 mesh\n")
+		f.write("cylindrical HEX8 mesh\n")
 		f.write("ASCII\n")
 		f.write("DATASET UNSTRUCTURED_GRID\n")
 

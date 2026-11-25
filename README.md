@@ -26,15 +26,17 @@ directory of the config file, not from the current directory.
 The cylinder script prints a summary, including a quality report of the cross-section:
 
 ```
-  quality (cross-section, size relative to 1.5):
+  quality (cross-section):
     scaled Jacobian : min 0.865  mean 0.988  (1 = square)
     aspect ratio max: 1.767
-    cell size       : min 0.606  mean 0.800  max 0.984  CV 0.086
+    mean cell size  : 0.800 x target (1.5)
+    size uniformity : min 0.757  max 1.229 x mean  CV 0.086
 ```
 
 - **scaled Jacobian:** the sine of the worst corner angle of a cell. 1 is a perfect square, values at or below 0 are inverted cells.
 - **aspect ratio:** longest over shortest edge of a cell.
-- **cell size:** square root of the cell area, divided by the target size (`mesh_size`). CV is the standard deviation over the mean.
+- **mean cell size:** cell size is the square root of the cell area; this line gives the mean over all cells divided by the target size (`mesh_size`).
+- **size uniformity:** smallest and largest cell size divided by the mean cell size, and the coefficient of variation (standard deviation over the mean). All three are 1, 1 and 0 for a perfectly uniform mesh, whatever the target size.
 
 Extrusion along the axis does not change these in-plane numbers.
 
@@ -201,6 +203,7 @@ the nodes, were both tested and made the mesh worse, so neither is used.
 
 A cylinder with $R = 150$ and `mesh_size` 1.5 (100 cells across the radius,
 48,672 cells per layer) has worst scaled Jacobian 0.865, largest aspect ratio
-1.77, and cell sizes between 0.61 and 0.98 times `mesh_size` (CV 0.086). These
+1.77, mean cell size 0.80 times `mesh_size`, and cell sizes between 0.76 and
+1.23 times the mean (CV 0.086). These
 numbers stay the same when the mesh is refined or coarsened, because the shape
 of the cross-section depends only on $b$ and $c$.

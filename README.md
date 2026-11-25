@@ -203,9 +203,22 @@ the nodes, were both tested and made the mesh worse, so neither is used.
 
 ### Resulting quality
 
-A cylinder with $R = 150$ and `mesh_size` 1.5 (100 cells across the radius,
-48,672 cells per layer) has worst scaled Jacobian 0.865, largest aspect ratio
-1.77, mean cell size 0.80 times `mesh_size`, and cell sizes between 0.76 and
-1.23 times the mean (CV 0.086). These
-numbers stay the same when the mesh is refined or coarsened, because the shape
-of the cross-section depends only on $b$ and $c$.
+Per-cell quality of the default cross-section under refinement ($R = 150$,
+`mesh_size` = $R$ / cells across the radius). "Central 95 %" is the range that
+covers 95 % of the cells (2.5th to 97.5th percentile); cell size is the square
+root of the cell area, given relative to the mean cell size.
+
+| Cells across radius | Cells per layer | Mean size / mesh_size | Size vs mean, central 95 % | Size vs mean, min / max | Worst scaled Jacobian | Best scaled Jacobian | Aspect min | Aspect mean | Aspect central 95 % | Aspect max |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 10 | 576 | 0.74 | -19 % / +14 % | -23 % / +15 % | 0.858 | 1.000 | 1.00 | 1.26 | 1.01 - 2.05 | 2.21 |
+| 20 | 2,176 | 0.76 | -17 % / +16 % | -24 % / +19 % | 0.862 | 1.000 | 1.00 | 1.16 | 1.01 - 1.72 | 1.99 |
+| 40 | 7,812 | 0.80 | -15 % / +18 % | -24 % / +22 % | 0.864 | 1.000 | 1.00 | 1.12 | 1.00 - 1.53 | 1.82 |
+| 80 | 31,500 | 0.80 | -14 % / +20 % | -24 % / +23 % | 0.865 | 1.000 | 1.00 | 1.11 | 1.00 - 1.44 | 1.74 |
+| 160 | 124,992 | 0.80 | -14 % / +20 % | -24 % / +24 % | 0.866 | 1.000 | 1.00 | 1.11 | 1.00 - 1.41 | 1.71 |
+
+The quality improves slightly and then converges under refinement: the worst scaled Jacobian
+approaches the limit $\sin(120^\circ) = 0.866$ of equation (3), and the largest
+aspect ratio drops towards 1.7 as the spokes are resolved more finely. 95 % of
+the cells stay within about $\pm 20$ % of the mean size at every resolution.
+The mean cell size settles at 0.80 times `mesh_size`, because the angular
+resolution is set so the rim cells (the largest) are about `mesh_size` wide.

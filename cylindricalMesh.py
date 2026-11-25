@@ -587,7 +587,7 @@ def _select_hex_order(points2d: Sequence[Vec2f], quads: Sequence[Quad], z_levels
 	return "bottom_top"
 
 
-def _legacy_profile_value(r: float, high: float, low: float, profile_radius: float) -> float:
+def _profile_value(r: float, high: float, low: float, profile_radius: float) -> float:
 	delta = 0.5 * (1.0 - (low / high) ** 2)
 	value_under_sqrt = high * high * (1.0 - 2.0 * delta * (r / profile_radius) ** 2)
 	low_sq = low * low
@@ -673,7 +673,7 @@ def _write_vtk(
 					gy += sy
 					gz += sz
 					r = _radial_distance_for_axis(gx, gy, gz, length_axis)
-					n_value = _legacy_profile_value(
+					n_value = _profile_value(
 						r=r,
 						high=fields.n1,
 						low=fields.n2,
@@ -690,7 +690,7 @@ def _write_vtk(
 					gy += sy
 					gz += sz
 					r = _radial_distance_for_axis(gx, gy, gz, length_axis)
-					a_value = _legacy_profile_value(
+					a_value = _profile_value(
 						r=r,
 						high=fields.amax,
 						low=fields.amin,
@@ -738,7 +738,7 @@ def _load_config(config_path: Path) -> Tuple[MeshConfig, FieldConfig]:
 def main() -> None:
 	parser = argparse.ArgumentParser(
 		description=(
-			"Generate a legacy-compatible cylindrical VTK mesh with HEX8 elements "
+			"Generate a cylindrical HEX8 mesh (ASCII VTK) "
 			"from a TOML config file."
 		)
 	)

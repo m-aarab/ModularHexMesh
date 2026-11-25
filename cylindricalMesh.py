@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
@@ -64,6 +65,14 @@ except ModuleNotFoundError:  # pragma: no cover
 			"TOML support requires Python 3.11+ (tomllib) or package 'tomli'."
 		) from exc
 
+
+# Spoke layout defaults (resolution independent, see README "Spoke layout"):
+# bulge tan(15 deg)/2 makes the core corner 120 deg, so the three cells meeting there
+# all have 120-deg corners (worst scaled Jacobian sin 120 = 0.866, the topology's best).
+CORE_BULGE_DEFAULT = math.tan(math.radians(15.0)) / 2.0
+# Core half-width / rmax: within ~15 % of the best on max aspect ratio, size ratio and
+# size spread at once (least stretched cells at ~0.51, most uniform sizes at ~0.58).
+CORE_FRACTION_DEFAULT = 0.55
 
 Vec2f = Tuple[float, float]
 Vec3f = Tuple[float, float, float]
@@ -84,6 +93,8 @@ class FieldConfig:
 class MeshConfig:
 	out_base_path: Path
 	append_hmax: bool
+	layout: str
+	core_bulge: float
 	rmax: float
 	mesh_size: float | None
 	uniformity_target_size: float
@@ -417,6 +428,10 @@ def _parse_mesh(config_path: Path, raw: Dict[str, object]) -> MeshConfig:
 	circumferential_size = (2.0 * math.pi * rmax) / ntheta
 	uniformity_target_size = mesh_size if mesh_size is not None else circumferential_size
 
+	layout = str(_get_first(mesh_cfg, ("layout",)) or "spoke").strip().lower()
+	if layout not in ("spoke", "legacy"):
+		raise ValueError("mesh.layout must be 'spoke' or 'legacy'.")
+
 	rbase_raw = _get_first(mesh_cfg, ("rbase", "inner_radius", "transition_radius"))
 	rbase_value = None if rbase_raw is None else _parse_positive_float(rbase_raw, "mesh.rbase")
 	if rbase_value is not None and rbase_value >= rmax:
@@ -434,7 +449,36 @@ def _parse_mesh(config_path: Path, raw: Dict[str, object]) -> MeshConfig:
 	else:
 		tuning_enabled = bool(tune_transition_raw)
 
-	if tuning_enabled:
+	core_bulge = 0.0
+	if layout == "spoke":
+		if rbase_value is not None:
+			print(
+				"warning: mesh.rbase is ignored with layout='spoke' "
+				"(set layout='legacy' to reproduce old meshes).",
+				file=sys.stderr,
+			)
+		tuning_enabled = False
+		core_fraction_raw = _get_first(mesh_cfg, ("core_fraction",))
+		core_fraction = (
+			CORE_FRACTION_DEFAULT
+			if core_fraction_raw is None
+			else _parse_positive_float(core_fraction_raw, "mesh.core_fraction")
+		)
+		core_bulge_raw = _get_first(mesh_cfg, ("core_bulge",))
+		core_bulge = CORE_BULGE_DEFAULT if core_bulge_raw is None else float(core_bulge_raw)
+		if core_bulge < 0.0:
+			raise ValueError("mesh.core_bulge must be >= 0.")
+		if core_fraction * max(math.sqrt(2.0), 1.0 + core_bulge) >= 1.0:
+			raise ValueError("mesh.core_fraction too large: the square core must fit inside rmax.")
+		squaremax = core_fraction * rmax
+		rbase = squaremax * (1.0 + core_bulge)  # core mid-side radius
+		# Radial layers sized to the target along the mid-side spoke (longest spoke).
+		nr = nr_value if nr_value is not None else max(1, int(round((rmax - rbase) / uniformity_target_size)))
+		square_size = 2.0 * squaremax / nxy
+		radial_size = (rmax - rbase) / (nr + 1)
+		theta_inner_size = 2.0 * math.pi * rbase / ntheta
+		transition_size = radial_size
+	elif tuning_enabled:
 		rbase, nr, square_size, radial_size = _tune_transition_region(
 			rmax=rmax,
 			nxy=nxy,
@@ -463,15 +507,16 @@ def _parse_mesh(config_path: Path, raw: Dict[str, object]) -> MeshConfig:
 			)
 		square_size = 2.0 * squaremax_tmp / nxy
 
-	squaremax = _compute_squaremax(rmax=rmax, rbase=rbase, nr=nr)
-	if squaremax <= 0.0:
-		raise ValueError(
-			"Invalid geometry: computed square core half-width is <= 0. "
-			"Adjust rbase, rmax, or nr."
-		)
+	if layout == "legacy":
+		squaremax = _compute_squaremax(rmax=rmax, rbase=rbase, nr=nr)
+		if squaremax <= 0.0:
+			raise ValueError(
+				"Invalid geometry: computed square core half-width is <= 0. "
+				"Adjust rbase, rmax, or nr."
+			)
+		theta_inner_size = 2.0 * math.pi * rbase / ntheta
+		transition_size = rbase - math.sqrt(2.0) * squaremax
 	theta_outer_size = circumferential_size
-	theta_inner_size = 2.0 * math.pi * rbase / ntheta
-	transition_size = rbase - math.sqrt(2.0) * squaremax
 
 	length_axis = _parse_length_axis(
 		_get_first(mesh_cfg, ("length_axis", "axis", "cylinder_axis"))
@@ -528,6 +573,8 @@ def _parse_mesh(config_path: Path, raw: Dict[str, object]) -> MeshConfig:
 	return MeshConfig(
 		out_base_path=out_base_path,
 		append_hmax=append_hmax,
+		layout=layout,
+		core_bulge=core_bulge,
 		rmax=rmax,
 		mesh_size=mesh_size,
 		uniformity_target_size=uniformity_target_size,
@@ -937,6 +984,31 @@ def _write_vtk(
 					f.write(f"{a_value:.16g}\n")
 
 
+def _build_cross_section(mesh_cfg: MeshConfig) -> Tuple[List[Vec2f], List[Quad]]:
+	square_points = _build_square_points(mesh_cfg.squaremax, mesh_cfg.nxy, mesh_cfg.core_bulge)
+	boundary_order = _build_boundary_order(mesh_cfg.nxy)
+	if mesh_cfg.layout == "spoke":
+		ring_points = _build_spoke_ring_points(
+			[square_points[i] for i in boundary_order], mesh_cfg.rmax, mesh_cfg.nr
+		)
+	else:
+		ring_points = _build_ring_points(
+			rmax=mesh_cfg.rmax,
+			rbase=mesh_cfg.rbase,
+			nr=mesh_cfg.nr,
+			ntheta=mesh_cfg.ntheta,
+			squaremax=mesh_cfg.squaremax,
+		)
+	quads = _build_cross_section_quads(
+		nxy=mesh_cfg.nxy,
+		nr=mesh_cfg.nr,
+		ntheta=mesh_cfg.ntheta,
+		boundary_order=boundary_order,
+		n_square_nodes=len(square_points),
+	)
+	return square_points + ring_points, quads
+
+
 def _format_vec3(v: Sequence[float]) -> str:
 	return f"({v[0]:.12g}, {v[1]:.12g}, {v[2]:.12g})"
 
@@ -977,24 +1049,7 @@ def main() -> None:
 	except ValueError as exc:
 		raise SystemExit(f"Invalid config: {exc}") from exc
 
-	square_points = _build_square_points(mesh_cfg.squaremax, mesh_cfg.nxy)
-	ring_points = _build_ring_points(
-		rmax=mesh_cfg.rmax,
-		rbase=mesh_cfg.rbase,
-		nr=mesh_cfg.nr,
-		ntheta=mesh_cfg.ntheta,
-		squaremax=mesh_cfg.squaremax,
-	)
-
-	points2d = square_points + ring_points
-	boundary_order = _build_boundary_order(mesh_cfg.nxy)
-	quads = _build_cross_section_quads(
-		nxy=mesh_cfg.nxy,
-		nr=mesh_cfg.nr,
-		ntheta=mesh_cfg.ntheta,
-		boundary_order=boundary_order,
-		n_square_nodes=len(square_points),
-	)
+	points2d, quads = _build_cross_section(mesh_cfg)
 	z_levels = _build_z_levels(mesh_cfg.axis_start, mesh_cfg.dz, mesh_cfg.n_layers)
 
 	hmax = _compute_hmax(points2d, quads, mesh_cfg.dz)
@@ -1016,8 +1071,13 @@ def main() -> None:
 	n_cells = len(quads) * mesh_cfg.n_layers
 	print("Generated cylindrical HEX8 VTK mesh")
 	print(f"  output            : {out_path}")
+	print(f"  layout            : {mesh_cfg.layout}")
 	print(f"  rmax              : {mesh_cfg.rmax:.12g}")
-	print(f"  rbase             : {mesh_cfg.rbase:.12g}")
+	if mesh_cfg.layout == "spoke":
+		print(f"  core_fraction     : {mesh_cfg.squaremax / mesh_cfg.rmax:.6g}")
+		print(f"  core_bulge        : {mesh_cfg.core_bulge:.6g}")
+	else:
+		print(f"  rbase             : {mesh_cfg.rbase:.12g}")
 	if mesh_cfg.mesh_size is not None:
 		print(f"  mesh_size target  : {mesh_cfg.mesh_size:.12g}")
 	print(f"  h                 : {mesh_cfg.h}")

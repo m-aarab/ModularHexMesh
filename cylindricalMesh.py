@@ -121,7 +121,6 @@ class MeshConfig:
 	axial_mode: str
 	n_layers: int
 	dz: float
-	legacy_target_dz: float | None
 
 
 def _get_first(mapping: Dict[str, object], keys: Iterable[str]) -> object | None:
@@ -331,26 +330,11 @@ def _parse_mesh(config_path: Path, raw: Dict[str, object]) -> MeshConfig:
 
 	shift = _parse_vec3(_get_first(mesh_cfg, ("shift", "origin_shift", "offset")), "mesh.shift", (0.0, 0.0, 0.0))
 
-	axial_mode_raw = _get_first(mesh_cfg, ("axial_mode", "z_mode"))
-	if axial_mode_raw is None:
-		axial_mode = "mesh_size" if mesh_size is not None else "legacy"
-	else:
-		axial_mode = str(axial_mode_raw).strip().lower()
-	legacy_target_dz: float | None = None
-
-	if axial_mode == "legacy":
-		target_dz_raw = _get_first(mesh_cfg, ("target_dz", "legacy_target_dz"))
-		if target_dz_raw is None:
-			legacy_target_dz = rmax / (h + 1 + nr) * 1.5
-		else:
-			legacy_target_dz = _parse_positive_float(target_dz_raw, "mesh.target_dz")
-		blocks = int(length // legacy_target_dz)
-		if blocks <= 0:
-			raise ValueError(
-				"Legacy axial mode computed zero blocks. Increase mesh.length or decrease target_dz."
-			)
-		dz = length / blocks
-		n_layers = blocks + 1
+	axial_mode = str(_get_first(mesh_cfg, ("axial_mode", "z_mode")) or "mesh_size").strip().lower()
+	if axial_mode == "mesh_size":
+		# Target size: mesh_size, or the rim cell size when only h is given.
+		n_layers = max(1, int(round(length / uniformity_target_size)))
+		dz = length / n_layers
 	elif axial_mode == "fixed_layers":
 		n_layers_raw = _get_first(mesh_cfg, ("n_layers", "layers", "nz"))
 		if n_layers_raw is None:
@@ -364,14 +348,9 @@ def _parse_mesh(config_path: Path, raw: Dict[str, object]) -> MeshConfig:
 		dz_in = _parse_positive_float(dz_raw, "mesh.dz")
 		n_layers = max(1, int(math.ceil(length / dz_in)))
 		dz = length / n_layers
-	elif axial_mode == "mesh_size":
-		if mesh_size is None:
-			raise ValueError("mesh.mesh_size is required for axial_mode='mesh_size'.")
-		n_layers = max(1, int(round(length / mesh_size)))
-		dz = length / n_layers
 	else:
 		raise ValueError(
-			"mesh.axial_mode must be one of: 'legacy', 'fixed_layers', 'fixed_dz', 'mesh_size'."
+			"mesh.axial_mode must be one of: 'mesh_size', 'fixed_layers', 'fixed_dz'."
 		)
 
 	return MeshConfig(
@@ -393,7 +372,6 @@ def _parse_mesh(config_path: Path, raw: Dict[str, object]) -> MeshConfig:
 		axial_mode=axial_mode,
 		n_layers=n_layers,
 		dz=dz,
-		legacy_target_dz=legacy_target_dz,
 	)
 
 
@@ -818,8 +796,6 @@ def main() -> None:
 	)
 	print(f"  length_axis       : {mesh_cfg.length_axis}")
 	print(f"  axial_mode        : {mesh_cfg.axial_mode}")
-	if mesh_cfg.legacy_target_dz is not None:
-		print(f"  legacy_target_dz  : {mesh_cfg.legacy_target_dz:.12g}")
 	print(f"  axis_start        : {mesh_cfg.axis_start:.12g}")
 	print(f"  n_layers          : {mesh_cfg.n_layers}")
 	print(f"  dz                : {mesh_cfg.dz:.12g}")

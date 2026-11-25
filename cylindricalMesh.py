@@ -477,7 +477,11 @@ def _compute_hmax(points2d: Sequence[Vec2f], quads: Sequence[Quad], dz: float) -
 def _cross_section_quality(
 	points2d: Sequence[Vec2f], quads: Sequence[Quad], target_size: float
 ) -> Dict[str, float]:
-	"""Measured quad quality: scaled Jacobian, aspect ratio and size (sqrt(area)) vs target."""
+	"""Measured quad quality: scaled Jacobian, aspect ratio and cell size (sqrt(area)).
+
+	Uniformity (size_min, size_max, size_cv) is relative to the mean cell size;
+	size_mean is the mean relative to the target size.
+	"""
 	sj_min = 1.0
 	sj_sum = 0.0
 	ar_max = 1.0
@@ -512,9 +516,9 @@ def _cross_section_quality(
 		"sj_min": sj_min,
 		"sj_mean": sj_sum / len(quads),
 		"aspect_max": ar_max,
-		"size_min": min(sizes) / target_size,
+		"size_min": min(sizes) / mean,
 		"size_mean": mean / target_size,
-		"size_max": max(sizes) / target_size,
+		"size_max": max(sizes) / mean,
 		"size_cv": cv,
 	}
 
@@ -747,12 +751,16 @@ def main() -> None:
 	print(f"  ntheta            : {mesh_cfg.ntheta}")
 	print(f"  nxy               : {mesh_cfg.nxy}")
 	print(f"  squaremax         : {mesh_cfg.squaremax:.12g}")
-	print(f"  quality (cross-section, size relative to {mesh_cfg.uniformity_target_size:.6g}):")
+	print("  quality (cross-section):")
 	print(f"    scaled Jacobian : min {quality['sj_min']:.3f}  mean {quality['sj_mean']:.3f}  (1 = square)")
 	print(f"    aspect ratio max: {quality['aspect_max']:.3f}")
 	print(
-		f"    cell size       : min {quality['size_min']:.3f}  mean {quality['size_mean']:.3f}"
-		f"  max {quality['size_max']:.3f}  CV {quality['size_cv']:.3f}"
+		f"    mean cell size  : {quality['size_mean']:.3f} x target"
+		f" ({mesh_cfg.uniformity_target_size:.6g})"
+	)
+	print(
+		f"    size uniformity : min {quality['size_min']:.3f}  max {quality['size_max']:.3f}"
+		f" x mean  CV {quality['size_cv']:.3f}"
 	)
 	print(f"  length_axis       : {mesh_cfg.length_axis}")
 	print(f"  axial_mode        : {mesh_cfg.axial_mode}")

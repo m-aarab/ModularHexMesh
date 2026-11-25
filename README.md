@@ -30,9 +30,9 @@ The cylinder script prints a summary, including a quality report of the cross-se
 ```
   quality (cross-section):
     scaled Jacobian : min 0.865  mean 0.988  (1 = square)
-    aspect ratio max: 1.767
-    mean cell size  : 0.800 x target (1.5)
-    size uniformity : min 0.757  max 1.229 x mean  CV 0.086
+    aspect ratio max: 1.722
+    mean cell size  : 0.805 x target (1.5)
+    size uniformity : min 0.762  max 1.237 x mean  CV 0.089
 ```
 
 - **scaled Jacobian:** the sine of the worst corner angle of a cell. 1 is a perfect square, values at or below 0 are inverted cells.
@@ -160,9 +160,10 @@ on the circle, $O_j = R(\cos \theta_j, \sin \theta_j)$ with $\theta_j = 2 \pi j 
 $$P_{k j} = B_j + t_k (O_j - B_j), \qquad t_k = \frac{k + 1}{n_r + 1} \qquad (2)$$
 
 so the inner rings follow the node spacing of the core (there is no skewed
-transition layer) and the outermost ring is the circle. The number of rings is
-chosen so the radial step along the longest spoke (at mid-side) is close to the target:
-$n_r = \mathrm{round}((R - s(1 + b)) / h)$.
+transition layer) and the outermost ring is the circle. The annulus has
+$n_r + 1$ cell layers, chosen so the radial step along the longest spoke (at
+mid-side) is close to the target at every resolution:
+$n_r + 1 = \mathrm{round}((R - s(1 + b)) / h)$.
 
 ### Tuning
 
@@ -192,7 +193,7 @@ Equating the two gives the least stretched mesh,
 
 $$\frac{\pi}{4 c} = \frac{1 - c (1 + b)}{1 - \sqrt{2} c} \qquad (4)$$
 
-which at $b^*$ gives $c \approx 0.51$. The smallest ratio of largest to smallest
+which at $b^*$ gives $c \approx 0.51$ (a numerical sweep gives 0.52). The smallest ratio of largest to smallest
 cell is at $c \approx 0.49$ (maximum of $c(1 - \sqrt{2} c) / (1 - c(1 + b))$, the
 squared size of the smallest cell), and the lowest overall size variation is at
 $c \approx 0.58$ (found numerically). The default $c = 0.55$ is within about 15 % of
@@ -210,15 +211,15 @@ root of the cell area, given relative to the mean cell size.
 
 | Cells across radius | Cells per layer | Mean size / mesh_size | Size vs mean, central 95 % | Size vs mean, min / max | Worst scaled Jacobian | Best scaled Jacobian | Aspect min | Aspect mean | Aspect central 95 % | Aspect max |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 10 | 576 | 0.74 | -19 % / +14 % | -23 % / +15 % | 0.858 | 1.000 | 1.00 | 1.26 | 1.01 - 2.05 | 2.21 |
-| 20 | 2,176 | 0.76 | -17 % / +16 % | -24 % / +19 % | 0.862 | 1.000 | 1.00 | 1.16 | 1.01 - 1.72 | 1.99 |
-| 40 | 7,812 | 0.80 | -15 % / +18 % | -24 % / +22 % | 0.864 | 1.000 | 1.00 | 1.12 | 1.00 - 1.53 | 1.82 |
-| 80 | 31,500 | 0.80 | -14 % / +20 % | -24 % / +23 % | 0.865 | 1.000 | 1.00 | 1.11 | 1.00 - 1.44 | 1.74 |
-| 160 | 124,992 | 0.80 | -14 % / +20 % | -24 % / +24 % | 0.866 | 1.000 | 1.00 | 1.11 | 1.00 - 1.41 | 1.71 |
+| 10 | 512 | 0.78 | -13 % / +20 % | -18 % / +21 % | 0.858 | 1.000 | 1.00 | 1.16 | 1.01 - 1.61 | 1.77 |
+| 20 | 2,048 | 0.78 | -14 % / +19 % | -22 % / +22 % | 0.862 | 1.000 | 1.00 | 1.13 | 1.01 - 1.53 | 1.77 |
+| 40 | 7,564 | 0.81 | -14 % / +20 % | -23 % / +24 % | 0.864 | 1.000 | 1.00 | 1.12 | 1.00 - 1.44 | 1.71 |
+| 80 | 30,996 | 0.80 | -14 % / +21 % | -23 % / +24 % | 0.865 | 1.000 | 1.00 | 1.11 | 1.00 - 1.42 | 1.68 |
+| 160 | 123,984 | 0.80 | -14 % / +21 % | -24 % / +25 % | 0.866 | 1.000 | 1.00 | 1.11 | 1.00 - 1.41 | 1.68 |
 
 The quality improves slightly and then converges under refinement: the worst scaled Jacobian
 approaches the limit $\sin(120^\circ) = 0.866$ of equation (3), and the largest
-aspect ratio drops towards 1.7 as the spokes are resolved more finely. 95 % of
-the cells stay within about $\pm 20$ % of the mean size at every resolution.
-The mean cell size settles at 0.80 times `mesh_size`, because the angular
-resolution is set so the rim cells (the largest) are about `mesh_size` wide.
+aspect ratio stays between 1.68 and 1.77. 95 % of the cells are within -14 % to
++21 % of the mean size at every resolution. The mean cell size is 0.78 to 0.81
+times `mesh_size`, because the angular resolution is set so the rim cells (the
+largest) are about `mesh_size` wide.

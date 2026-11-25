@@ -22,7 +22,7 @@ mesh_size = 20.0
 # Cross-section (the defaults are optimal at any resolution; see README "Tuning")
 # core_fraction = 0.55 # core half-width / rmax
 # core_bulge = 0.134   # outward bow of the core edges; tan(15 deg)/2 gives 120-deg core corners
-# nr = 6               # rings - 1; default gives a radial step close to mesh_size
+# nr = 5               # rings - 1 (layers - 1); default gives a radial step close to mesh_size
 
 # Axial discretization: "mesh_size" (default), "fixed_layers" (n_layers) or "fixed_dz" (dz)
 axial_mode = "mesh_size"

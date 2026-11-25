@@ -276,8 +276,10 @@ def _parse_mesh(config_path: Path, raw: Dict[str, object]) -> MeshConfig:
 
 	nr_raw = _get_first(mesh_cfg, ("nr", "n_radial"))
 	if nr_raw is None:
-		# Radial step close to the target along the mid-side spoke (the longest spoke).
-		nr = max(1, int(round((rmax - squaremax * (1.0 + core_bulge)) / uniformity_target_size)))
+		# The annulus has nr + 1 layers; size them so the radial step along the mid-side
+		# spoke (the longest spoke) is close to the target at every resolution.
+		layers = int(round((rmax - squaremax * (1.0 + core_bulge)) / uniformity_target_size))
+		nr = max(1, layers - 1)
 	else:
 		nr = _parse_positive_int(nr_raw, "mesh.nr")
 

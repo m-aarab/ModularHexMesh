@@ -7,7 +7,9 @@ Small, dependency-free generators for structured HEX8 (hexahedral) meshes:
 
 Both write VTK 3.0 ASCII files (`DATASET UNSTRUCTURED_GRID`, cell type 12), readable by ParaView, meshio, PyVista and most finite-element tools.
 
-![Cylinder cross-section at 20 cells across the radius, coloured by scaled Jacobian and by cell size](docs/cross_section.png)
+![Cylinder cross-section at 20 cells across the radius, coloured by scaled Jacobian, aspect ratio and cell size](docs/cross_section.png)
+
+*Default cylinder cross-section (20 cells across the radius), per cell: scaled Jacobian, aspect ratio, and size relative to the mean cell size. The least square cells sit at the four core corners, the most stretched on the rim along the diagonals (see [Tuning](#tuning)).*
 
 ## Requirements
 

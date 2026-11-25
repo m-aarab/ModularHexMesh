@@ -63,7 +63,6 @@ from __future__ import annotations
 
 import argparse
 import math
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
@@ -79,7 +78,7 @@ except ModuleNotFoundError:  # pragma: no cover
 		) from exc
 
 
-# Spoke layout defaults (resolution independent, see the module docstring):
+# Cross-section defaults (resolution independent, see README "Tuning"):
 # bulge tan(15 deg)/2 makes the core corner 120 deg, so the three cells meeting there
 # all have 120-deg corners (worst scaled Jacobian sin 120 = 0.866, the topology's best).
 CORE_BULGE_DEFAULT = math.tan(math.radians(15.0)) / 2.0
@@ -106,23 +105,14 @@ class FieldConfig:
 class MeshConfig:
 	out_base_path: Path
 	append_hmax: bool
-	layout: str
-	core_bulge: float
 	rmax: float
 	mesh_size: float | None
 	uniformity_target_size: float
-	tuning_enabled: bool
-	rbase: float
 	h: int
 	nr: int
 	ntheta: int
 	nxy: int
-	circumferential_size: float
-	theta_inner_size: float
-	theta_outer_size: float
-	radial_size: float
-	square_size: float
-	transition_size: float
+	core_bulge: float
 	squaremax: float
 	length: float
 	length_axis: str
@@ -238,136 +228,6 @@ def _derive_h_from_mesh_size(rmax: float, mesh_size: float) -> int:
 	return max(1, ntheta // 8)
 
 
-def _compute_squaremax(rmax: float, rbase: float, nr: int) -> float:
-	dr = (rmax - rbase) / nr
-	return (rbase - 2.0 * dr) / math.sqrt(2.0)
-
-
-def _transition_uniformity_objective(
-	square_size: float,
-	radial_size: float,
-	theta_inner_size: float,
-	theta_outer_size: float,
-	transition_size: float,
-	target_size: float,
-) -> float:
-	# Balance target-size matching with region-to-region uniformity.
-	e_square = (square_size - target_size) / target_size
-	e_radial = (radial_size - target_size) / target_size
-	e_theta_in = (theta_inner_size - target_size) / target_size
-	e_theta_out = (theta_outer_size - target_size) / target_size
-	e_transition = (transition_size - target_size) / target_size
-
-	u_square_radial = (square_size - radial_size) / target_size
-	u_square_theta = (square_size - theta_inner_size) / target_size
-	u_radial_theta = (radial_size - theta_inner_size) / target_size
-	u_theta_in_out = (theta_inner_size - theta_outer_size) / target_size
-	u_transition_radial = (transition_size - radial_size) / target_size
-	u_transition_theta = (transition_size - theta_inner_size) / target_size
-	u_transition_square = (transition_size - square_size) / target_size
-
-	fit_score = (
-		e_square * e_square
-		+ e_radial * e_radial
-		+ 0.8 * e_theta_in * e_theta_in
-		+ 0.6 * e_theta_out * e_theta_out
-		+ 1.8 * e_transition * e_transition
-	)
-
-	uniformity_score = (
-		u_square_radial * u_square_radial
-		+ u_square_theta * u_square_theta
-		+ u_radial_theta * u_radial_theta
-		+ 0.4 * u_theta_in_out * u_theta_in_out
-		+ 0.8 * u_transition_radial * u_transition_radial
-		+ 0.7 * u_transition_theta * u_transition_theta
-		+ 0.6 * u_transition_square * u_transition_square
-	)
-
-	return 0.5 * uniformity_score + 0.5 * fit_score
-
-
-def _tune_transition_region(
-	rmax: float,
-	nxy: int,
-	ntheta: int,
-	target_size: float,
-	rbase_hint: float | None,
-	nr_hint: int | None,
-) -> Tuple[float, int, float, float]:
-	if target_size <= 0.0:
-		raise ValueError("Uniformity target size must be > 0.")
-
-	max_nr = max(6, int(math.ceil(2.0 * rmax / target_size)))
-	max_nr = min(max_nr, 5000)
-
-	if nr_hint is not None:
-		nr_values: Sequence[int] = [nr_hint]
-	else:
-		# Avoid nr=1 in auto mode; it usually creates oversized transition quads.
-		nr_values = list(range(2, max_nr + 1))
-
-	best_obj: float | None = None
-	best_rbase = 0.0
-	best_nr = 0
-	best_square_size = 0.0
-	best_radial_size = 0.0
-
-	for nr in nr_values:
-		rbase_min = 2.0 * rmax / (nr + 2.0) + 1e-12
-		rbase_max = rmax - 1e-12
-		if rbase_min >= rbase_max:
-			continue
-
-		if rbase_hint is not None:
-			rbase_values: Sequence[float] = [rbase_hint]
-		else:
-			n_samples = 240
-			step = (rbase_max - rbase_min) / (n_samples - 1)
-			rbase_values = [rbase_min + i * step for i in range(n_samples)]
-
-		for rbase in rbase_values:
-			if rbase <= rbase_min or rbase >= rbase_max:
-				continue
-
-			radial_size = (rmax - rbase) / nr
-			theta_inner_size = 2.0 * math.pi * rbase / ntheta
-			theta_outer_size = 2.0 * math.pi * rmax / ntheta
-			squaremax = _compute_squaremax(rmax=rmax, rbase=rbase, nr=nr)
-			if squaremax <= 0.0:
-				continue
-
-			square_size = 2.0 * squaremax / nxy
-			transition_size = rbase - math.sqrt(2.0) * squaremax
-			obj = _transition_uniformity_objective(
-				square_size=square_size,
-				radial_size=radial_size,
-				theta_inner_size=theta_inner_size,
-				theta_outer_size=theta_outer_size,
-				transition_size=transition_size,
-				target_size=target_size,
-			)
-
-			if nr_hint is None:
-				# Mild regularization toward not-too-small radial partitioning.
-				obj += 0.05 / nr
-
-			if best_obj is None or obj < best_obj:
-				best_obj = obj
-				best_rbase = rbase
-				best_nr = nr
-				best_square_size = square_size
-				best_radial_size = radial_size
-
-	if best_obj is None:
-		raise ValueError(
-			"Could not find a valid transition tuning solution. "
-			"Adjust mesh_size/h/rbase/nr settings."
-		)
-
-	return best_rbase, best_nr, best_square_size, best_radial_size
-
-
 def _parse_fields(raw: Dict[str, object]) -> FieldConfig:
 	fields_cfg = raw.get("fields", {})
 	if fields_cfg is None:
@@ -441,95 +301,26 @@ def _parse_mesh(config_path: Path, raw: Dict[str, object]) -> MeshConfig:
 	circumferential_size = (2.0 * math.pi * rmax) / ntheta
 	uniformity_target_size = mesh_size if mesh_size is not None else circumferential_size
 
-	layout = str(_get_first(mesh_cfg, ("layout",)) or "spoke").strip().lower()
-	if layout not in ("spoke", "legacy"):
-		raise ValueError("mesh.layout must be 'spoke' or 'legacy'.")
-
-	rbase_raw = _get_first(mesh_cfg, ("rbase", "inner_radius", "transition_radius"))
-	rbase_value = None if rbase_raw is None else _parse_positive_float(rbase_raw, "mesh.rbase")
-	if rbase_value is not None and rbase_value >= rmax:
-		raise ValueError("mesh.rbase must be < mesh.rmax.")
+	core_fraction_raw = _get_first(mesh_cfg, ("core_fraction",))
+	core_fraction = (
+		CORE_FRACTION_DEFAULT
+		if core_fraction_raw is None
+		else _parse_positive_float(core_fraction_raw, "mesh.core_fraction")
+	)
+	core_bulge_raw = _get_first(mesh_cfg, ("core_bulge",))
+	core_bulge = CORE_BULGE_DEFAULT if core_bulge_raw is None else float(core_bulge_raw)
+	if core_bulge < 0.0:
+		raise ValueError("mesh.core_bulge must be >= 0.")
+	if core_fraction * max(math.sqrt(2.0), 1.0 + core_bulge) >= 1.0:
+		raise ValueError("mesh.core_fraction too large: the square core must fit inside rmax.")
+	squaremax = core_fraction * rmax
 
 	nr_raw = _get_first(mesh_cfg, ("nr", "n_radial"))
-	nr_value = None if nr_raw is None else _parse_positive_int(nr_raw, "mesh.nr")
-
-	tune_transition_raw = _get_first(
-		mesh_cfg,
-		("tune_transition", "tune_uniformity", "auto_tune_regions"),
-	)
-	if tune_transition_raw is None:
-		tuning_enabled = rbase_value is None or nr_value is None
+	if nr_raw is None:
+		# Radial step close to the target along the mid-side spoke (the longest spoke).
+		nr = max(1, int(round((rmax - squaremax * (1.0 + core_bulge)) / uniformity_target_size)))
 	else:
-		tuning_enabled = bool(tune_transition_raw)
-
-	core_bulge = 0.0
-	if layout == "spoke":
-		if rbase_value is not None:
-			print(
-				"warning: mesh.rbase is ignored with layout='spoke' "
-				"(set layout='legacy' to reproduce old meshes).",
-				file=sys.stderr,
-			)
-		tuning_enabled = False
-		core_fraction_raw = _get_first(mesh_cfg, ("core_fraction",))
-		core_fraction = (
-			CORE_FRACTION_DEFAULT
-			if core_fraction_raw is None
-			else _parse_positive_float(core_fraction_raw, "mesh.core_fraction")
-		)
-		core_bulge_raw = _get_first(mesh_cfg, ("core_bulge",))
-		core_bulge = CORE_BULGE_DEFAULT if core_bulge_raw is None else float(core_bulge_raw)
-		if core_bulge < 0.0:
-			raise ValueError("mesh.core_bulge must be >= 0.")
-		if core_fraction * max(math.sqrt(2.0), 1.0 + core_bulge) >= 1.0:
-			raise ValueError("mesh.core_fraction too large: the square core must fit inside rmax.")
-		squaremax = core_fraction * rmax
-		rbase = squaremax * (1.0 + core_bulge)  # core mid-side radius
-		# Radial layers sized to the target along the mid-side spoke (longest spoke).
-		nr = nr_value if nr_value is not None else max(1, int(round((rmax - rbase) / uniformity_target_size)))
-		square_size = 2.0 * squaremax / nxy
-		radial_size = (rmax - rbase) / (nr + 1)
-		theta_inner_size = 2.0 * math.pi * rbase / ntheta
-		transition_size = radial_size
-	elif tuning_enabled:
-		rbase, nr, square_size, radial_size = _tune_transition_region(
-			rmax=rmax,
-			nxy=nxy,
-			ntheta=ntheta,
-			target_size=uniformity_target_size,
-			rbase_hint=rbase_value,
-			nr_hint=nr_value,
-		)
-	else:
-		rbase_default = rmax / 3.0 * 2.25
-		rbase = rbase_default if rbase_value is None else rbase_value
-		if nr_value is None:
-			if mesh_size is not None:
-				nr = max(1, int(round((rmax - rbase) / mesh_size)))
-			else:
-				nr = h // 2 + 1
-		else:
-			nr = nr_value
-
-		radial_size = (rmax - rbase) / nr
-		squaremax_tmp = _compute_squaremax(rmax=rmax, rbase=rbase, nr=nr)
-		if squaremax_tmp <= 0.0:
-			raise ValueError(
-				"Invalid geometry: computed square core half-width is <= 0. "
-				"Adjust rbase, rmax, or nr."
-			)
-		square_size = 2.0 * squaremax_tmp / nxy
-
-	if layout == "legacy":
-		squaremax = _compute_squaremax(rmax=rmax, rbase=rbase, nr=nr)
-		if squaremax <= 0.0:
-			raise ValueError(
-				"Invalid geometry: computed square core half-width is <= 0. "
-				"Adjust rbase, rmax, or nr."
-			)
-		theta_inner_size = 2.0 * math.pi * rbase / ntheta
-		transition_size = rbase - math.sqrt(2.0) * squaremax
-	theta_outer_size = circumferential_size
+		nr = _parse_positive_int(nr_raw, "mesh.nr")
 
 	length_axis = _parse_length_axis(
 		_get_first(mesh_cfg, ("length_axis", "axis", "cylinder_axis"))
@@ -586,23 +377,14 @@ def _parse_mesh(config_path: Path, raw: Dict[str, object]) -> MeshConfig:
 	return MeshConfig(
 		out_base_path=out_base_path,
 		append_hmax=append_hmax,
-		layout=layout,
-		core_bulge=core_bulge,
 		rmax=rmax,
 		mesh_size=mesh_size,
 		uniformity_target_size=uniformity_target_size,
-		tuning_enabled=tuning_enabled,
-		rbase=rbase,
 		h=h,
 		nr=nr,
 		ntheta=ntheta,
 		nxy=nxy,
-		circumferential_size=circumferential_size,
-		theta_inner_size=theta_inner_size,
-		theta_outer_size=theta_outer_size,
-		radial_size=radial_size,
-		square_size=square_size,
-		transition_size=transition_size,
+		core_bulge=core_bulge,
 		squaremax=squaremax,
 		length=length,
 		length_axis=length_axis,
@@ -630,64 +412,6 @@ def _radial_distance_for_axis(x: float, y: float, z: float, axis: str) -> float:
 	if axis == "x":
 		return math.hypot(y, z)
 	return math.hypot(x, z)
-
-
-def _build_ring_points(
-	rmax: float,
-	rbase: float,
-	nr: int,
-	ntheta: int,
-	squaremax: float,
-) -> List[Vec2f]:
-	points: List[Vec2f] = []
-	dr = (rmax - rbase) / nr
-	quarter = ntheta // 4
-	half_quarter = quarter // 2
-
-	for i in range(nr + 1):
-		r = rbase + i * (rmax - rbase) / nr
-		fac = i / nr
-		for j in range(ntheta):
-			theta = j / ntheta * 2.0 * math.pi
-			is_corner = (j % quarter) == half_quarter
-
-			theta_shift = theta + math.pi / 4.0
-			if theta_shift < 0.0:
-				theta_shift += 2.0 * math.pi
-			if theta_shift > 2.0 * math.pi:
-				theta_shift -= 2.0 * math.pi
-
-			if is_corner:
-				x_morph = (r - dr) * math.cos(theta)
-				y_morph = (r - dr) * math.sin(theta)
-			elif theta_shift < math.pi / 2.0:
-				x_morph = r / math.sqrt(2.0)
-				y0 = r * math.sin(theta)
-				y1 = -squaremax + theta_shift * 2.0 / math.pi * squaremax * 2.0
-				y_morph = 0.5 * y0 + 0.5 * y1
-			elif theta_shift < math.pi:
-				x0 = r * math.cos(theta)
-				x1 = squaremax - (theta_shift - math.pi / 2.0) * 2.0 / math.pi * squaremax * 2.0
-				x_morph = 0.5 * x0 + 0.5 * x1
-				y_morph = r / math.sqrt(2.0)
-			elif theta_shift < 1.5 * math.pi:
-				x_morph = -r / math.sqrt(2.0)
-				y0 = r * math.sin(theta)
-				y1 = squaremax - (theta_shift - math.pi) * 2.0 / math.pi * squaremax * 2.0
-				y_morph = 0.5 * y0 + 0.5 * y1
-			else:
-				x0 = r * math.cos(theta)
-				x1 = -squaremax + (theta_shift - 1.5 * math.pi) * 2.0 / math.pi * squaremax * 2.0
-				x_morph = 0.5 * x0 + 0.5 * x1
-				y_morph = -r / math.sqrt(2.0)
-
-			xc = r * math.cos(theta)
-			yc = r * math.sin(theta)
-			x = xc * fac + x_morph * (1.0 - fac)
-			y = yc * fac + y_morph * (1.0 - fac)
-			points.append((x, y))
-
-	return points
 
 
 def _build_spoke_ring_points(boundary_pts: Sequence[Vec2f], rmax: float, nr: int) -> List[Vec2f]:
@@ -1000,18 +724,9 @@ def _write_vtk(
 def _build_cross_section(mesh_cfg: MeshConfig) -> Tuple[List[Vec2f], List[Quad]]:
 	square_points = _build_square_points(mesh_cfg.squaremax, mesh_cfg.nxy, mesh_cfg.core_bulge)
 	boundary_order = _build_boundary_order(mesh_cfg.nxy)
-	if mesh_cfg.layout == "spoke":
-		ring_points = _build_spoke_ring_points(
-			[square_points[i] for i in boundary_order], mesh_cfg.rmax, mesh_cfg.nr
-		)
-	else:
-		ring_points = _build_ring_points(
-			rmax=mesh_cfg.rmax,
-			rbase=mesh_cfg.rbase,
-			nr=mesh_cfg.nr,
-			ntheta=mesh_cfg.ntheta,
-			squaremax=mesh_cfg.squaremax,
-		)
+	ring_points = _build_spoke_ring_points(
+		[square_points[i] for i in boundary_order], mesh_cfg.rmax, mesh_cfg.nr
+	)
 	quads = _build_cross_section_quads(
 		nxy=mesh_cfg.nxy,
 		nr=mesh_cfg.nr,
@@ -1084,21 +799,15 @@ def main() -> None:
 	n_cells = len(quads) * mesh_cfg.n_layers
 	print("Generated cylindrical HEX8 VTK mesh")
 	print(f"  output            : {out_path}")
-	print(f"  layout            : {mesh_cfg.layout}")
 	print(f"  rmax              : {mesh_cfg.rmax:.12g}")
-	if mesh_cfg.layout == "spoke":
-		print(f"  core_fraction     : {mesh_cfg.squaremax / mesh_cfg.rmax:.6g}")
-		print(f"  core_bulge        : {mesh_cfg.core_bulge:.6g}")
-	else:
-		print(f"  rbase             : {mesh_cfg.rbase:.12g}")
+	print(f"  core_fraction     : {mesh_cfg.squaremax / mesh_cfg.rmax:.6g}")
+	print(f"  core_bulge        : {mesh_cfg.core_bulge:.6g}")
 	if mesh_cfg.mesh_size is not None:
 		print(f"  mesh_size target  : {mesh_cfg.mesh_size:.12g}")
 	print(f"  h                 : {mesh_cfg.h}")
 	print(f"  nr                : {mesh_cfg.nr}")
 	print(f"  ntheta            : {mesh_cfg.ntheta}")
 	print(f"  nxy               : {mesh_cfg.nxy}")
-	print(f"  uniformity target : {mesh_cfg.uniformity_target_size:.12g}")
-	print(f"  transition tuned  : {mesh_cfg.tuning_enabled}")
 	print(f"  squaremax         : {mesh_cfg.squaremax:.12g}")
 	print(f"  quality (cross-section, size relative to {mesh_cfg.uniformity_target_size:.6g}):")
 	print(f"    scaled Jacobian : min {quality['sj_min']:.3f}  mean {quality['sj_mean']:.3f}  (1 = square)")

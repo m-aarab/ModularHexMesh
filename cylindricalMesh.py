@@ -630,6 +630,27 @@ def _build_ring_points(
 	return points
 
 
+def _build_spoke_ring_points(boundary_pts: Sequence[Vec2f], rmax: float, nr: int) -> List[Vec2f]:
+	"""Rings on straight spokes from each core-boundary node to its circle node.
+
+	Ring k (k = 0..nr) sits at t = (k+1)/(nr+1) along the spoke
+	B_j -> O_j = rmax*(cos, sin)(2*pi*j/ntheta), so the inner rings follow the
+	core's node spacing and the outer ring is the circle. boundary_pts must start
+	at theta = 0 and run counter-clockwise (the _build_boundary_order order).
+	"""
+	ntheta = len(boundary_pts)
+	outer = [
+		(rmax * math.cos(2.0 * math.pi * j / ntheta), rmax * math.sin(2.0 * math.pi * j / ntheta))
+		for j in range(ntheta)
+	]
+	points: List[Vec2f] = []
+	for k in range(nr + 1):
+		t = (k + 1) / (nr + 1)
+		for (bx, by), (ox, oy) in zip(boundary_pts, outer):
+			points.append((bx + t * (ox - bx), by + t * (oy - by)))
+	return points
+
+
 def _build_square_points(squaremax: float, nxy: int, bulge: float = 0.0) -> List[Vec2f]:
 	"""Square core grid; bulge > 0 bows each edge outward by bulge*squaremax at mid-side.
 
